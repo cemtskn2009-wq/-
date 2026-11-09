@@ -1,0 +1,40 @@
+name: Unpack MAHMOUD AI source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/unpack-source.yml"
+      - "mahmoud-ai-video-starter.zip"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract project source
+        run: |
+          test -f mahmoud-ai-video-starter.zip
+          unzip -o mahmoud-ai-video-starter.zip -d .
+          test -f mahmoud-ai-video/package.json
+          test -f mahmoud-ai-video/README-AR.md
+
+      - name: Commit extracted source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mahmoud-ai-video/
+          if git diff --cached --quiet; then
+            echo "No source changes to commit."
+          else
+            git commit -m "Add MAHMOUD AI source files"
+            git push
+          fi
