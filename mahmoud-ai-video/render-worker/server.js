@@ -32,7 +32,7 @@ app.post("/render",async(req,res)=>{
     const videoList=files.map((f)=>`file '${f.video}'`).join("\n");
     const audioInputs=files.flatMap(f=>["-i",f.audio]);
     await writeFile(path.join(dir,"videos.txt"),videoList);
-    await run(["-y","-f","concat","-safe","0","-i",path.join(dir,"videos.txt"),...audioInputs,"-filter_complex",`amix=inputs=${files.length}:duration=longest:dropout_transition=2[a]`,"-map","0:v:0","-map","[a]","-c:v","libx264","-preset","veryfast","-crf","23","-c:a","aac","-b:a","192k","-shortest","-movflags","+faststart",path.join(dir,"output.mp4")]);
+    await run(["-y","-f","concat","-safe","0","-i",path.join(dir,"videos.txt"),...audioInputs,"-filter_complex",`${files.map((_,i)=>`[${i+1}:a]`).join("")}concat=n=${files.length}:v=0:a=1[a]`,"-map","0:v:0","-map","[a]","-c:v","libx264","-preset","veryfast","-crf","23","-c:a","aac","-b:a","192k","-shortest","-movflags","+faststart",path.join(dir,"output.mp4")]);
     const output=await readFile(path.join(dir,"output.mp4"));
     res.setHeader("Content-Type","video/mp4");
     res.setHeader("Content-Length",output.length);
