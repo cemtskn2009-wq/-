@@ -33,5 +33,6 @@ jobs:
             echo "No source changes to commit."
           else
             git commit -m "Add MAHMOUD AI source files"
+            git pull --rebase origin main
             git push
           fi
