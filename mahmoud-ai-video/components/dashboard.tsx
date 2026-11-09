@@ -1,10 +1,11 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import { messages, type Locale } from "@/lib/i18n";
-import { Film, Plus, ShieldCheck, LogOut, Languages, Users, WandSparkles, Clapperboard } from "lucide-react";
+import { Film, Plus, ShieldCheck, LogOut, Languages, Users, WandSparkles, Clapperboard, FileText, RefreshCw, X } from "lucide-react";
 
 type Project = { id:string; title:string; format:string; content_language:string; status:string; created_at:string };
+type Script = { title:string; hook:string; introduction:string; scenes:{number:number;narration:string;visual_prompt:string;duration_seconds:number}[]; conclusion:string; description:string; tags:string[] };
 export default function Dashboard({email,role,initialProjects}:{email:string;role:string;initialProjects:Project[]}) {
   const [locale,setLocale] = useState<Locale>("ar");
   const [projects,setProjects] = useState(initialProjects);
@@ -12,6 +13,9 @@ export default function Dashboard({email,role,initialProjects}:{email:string;rol
   const [title,setTitle] = useState(""); const [idea,setIdea] = useState("");
   const [format,setFormat] = useState("long"); const [language,setLanguage] = useState("ar");
   const [duration,setDuration] = useState("8"); const [busy,setBusy] = useState(false); const [notice,setNotice] = useState("");
+  const [generatingId,setGeneratingId] = useState<string|null>(null);
+  const [activeScript,setActiveScript] = useState<{id:string;script:Script}|null>(null);
+  const [scriptSaving,setScriptSaving] = useState(false);
   const t = messages[locale]; const rtl = locale==="ar";
   const isAdmin = role==="admin";
   async function createProject(e:React.FormEvent) {
@@ -22,7 +26,42 @@ export default function Dashboard({email,role,initialProjects}:{email:string;rol
       target_duration_minutes:Number(duration), status:"script_draft"
     }).select("id,title,format,content_language,status,created_at").single();
     if(error){setNotice(t.error);setBusy(false);return;}
-    setProjects([data,...projects]);setShowForm(false);setTitle("");setIdea("");setNotice(t.saved);setBusy(false);
+    setProjects([data,...projects]);setShowForm(false);setTitle("");setIdea("");setNotice(locale==="ar"?"تم حفظ المشروع. اضغط «توليد السيناريو» للبدء.":"Project saved. Select Generate script to begin.");setBusy(false);
+  }
+  async function generateScript(projectId:string) {
+    setGeneratingId(projectId);setNotice("");
+    try {
+      const response=await fetch(`/api/projects/${projectId}/generate-script`,{method:"POST"});
+      const result=await response.json();
+      if(!response.ok) throw new Error(result.error || t.error);
+      setProjects(current=>current.map(p=>p.id===projectId?{...p,status:"script_review",title:result.data.title || p.title}:p));
+      setActiveScript({id:projectId,script:result.data.script});
+      setNotice(locale==="ar"?"تم توليد السيناريو. راجعه قبل الانتقال للصور.":"Script generated. Review it before moving to images.");
+    } catch(error) {
+      setNotice(error instanceof Error?error.message:t.error);
+    } finally { setGeneratingId(null); }
+  }
+  async function openSavedScript(projectId:string) {
+    const supabase=createClient();
+    const {data,error}=await supabase.from("projects").select("id,script").eq("id",projectId).single();
+    if(error || !data?.script){setNotice(locale==="ar"?"لا يوجد سيناريو محفوظ لهذا المشروع بعد.":"No saved script for this project yet.");return;}
+    setActiveScript({id:projectId,script:data.script as Script});
+  }
+  function updateScript<K extends keyof Script>(key:K,value:Script[K]) {
+    setActiveScript(current=>current?{...current,script:{...current.script,[key]:value}}:current);
+  }
+  async function saveScript() {
+    if(!activeScript) return;
+    setScriptSaving(true);setNotice("");
+    try {
+      const response=await fetch(`/api/projects/${activeScript.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({script:activeScript.script,status:"script_review"})});
+      const result=await response.json();
+      if(!response.ok) throw new Error(result.error || t.error);
+      setActiveScript({id:activeScript.id,script:result.data.script});
+      setProjects(current=>current.map(p=>p.id===activeScript.id?{...p,status:"script_review"}:p));
+      setNotice(locale==="ar"?"تم حفظ تعديلات السيناريو بنجاح.":"Script changes saved.");
+    } catch(error) { setNotice(error instanceof Error?error.message:t.error); }
+    finally { setScriptSaving(false); }
   }
   async function signOut(){const supabase=createClient();await supabase.auth.signOut();window.location.href="/login";}
   const statusLabel=(s:string)=>s==="script_draft"?t.statusDraft:s==="script_review"?t.statusReview:s==="image_review"?t.statusImages:t.statusReady;
@@ -51,12 +90,12 @@ export default function Dashboard({email,role,initialProjects}:{email:string;rol
           <label className="block text-sm">{t.duration}<select className="field mt-2" value={duration} onChange={e=>setDuration(e.target.value)}>{["1","3","5","8","10","15","20"].map(v=><option key={v} value={v}>{v} {locale==="ar"?"دقيقة":"minutes"}</option>)}</select></label>
         </div>
         <label className="block text-sm">{locale==="ar"?"اسم المشروع (اختياري)":"Project title (optional)"}<input className="field mt-2" value={title} onChange={e=>setTitle(e.target.value)} /></label>
-        <div className="rounded-xl border border-amber-300/20 bg-amber-400/5 p-3 text-sm text-amber-100">{t.coming}</div>
         <div className="flex gap-3"><button disabled={busy} className="btn btn-primary">{busy?t.loading:t.create}</button><button type="button" className="btn btn-muted" onClick={()=>setShowForm(false)}>{locale==="ar"?"إلغاء":"Cancel"}</button></div>
       </form>}
       <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><Film size={19}/>{t.projects}</h2><span className="text-xs text-slate-500">{projects.length}</span></div>
       {projects.length===0?<div className="card p-10 text-center text-slate-400"><Clapperboard size={32} className="mx-auto mb-3 opacity-60"/>{t.noProjects}</div>:
-        <div className="grid md:grid-cols-2 gap-4">{projects.map(p=><article key={p.id} className="card p-5"><div className="flex justify-between gap-3"><h3 className="font-bold">{p.title}</h3><span className="text-xs text-violet-200 bg-violet-500/15 rounded-full px-3 py-1 h-fit">{statusLabel(p.status)}</span></div><p className="text-sm text-slate-400 mt-3">{p.format==="shorts"?t.shorts:t.long} · {p.content_language==="ar"?t.arabic:t.english}</p><p className="text-xs text-slate-500 mt-3">{new Date(p.created_at).toLocaleDateString(locale==="ar"?"ar-EG":"en-US")}</p></article>)}</div>}
+        <div className="grid md:grid-cols-2 gap-4">{projects.map(p=><article key={p.id} className="card p-5"><div className="flex justify-between gap-3"><h3 className="font-bold">{p.title}</h3><span className="text-xs text-violet-200 bg-violet-500/15 rounded-full px-3 py-1 h-fit">{statusLabel(p.status)}</span></div><p className="text-sm text-slate-400 mt-3">{p.format==="shorts"?t.shorts:t.long} · {p.content_language==="ar"?t.arabic:t.english}</p><p className="text-xs text-slate-500 mt-3">{new Date(p.created_at).toLocaleDateString(locale==="ar"?"ar-EG":"en-US")}</p><div className="flex flex-wrap gap-2 mt-4"><button disabled={generatingId!==null} className="btn btn-primary text-sm flex items-center gap-2" onClick={()=>generateScript(p.id)}><WandSparkles size={15}/>{generatingId===p.id?(locale==="ar"?"جارٍ التوليد...":"Generating..."):(locale==="ar"?"توليد السيناريو":"Generate script")}</button>{p.status!=="script_draft"&&<button className="btn btn-muted text-sm flex items-center gap-2" onClick={()=>openSavedScript(p.id)}><FileText size={15}/>{locale==="ar"?"عرض السيناريو":"View script"}</button>}</div></article>)}</div>}
+      {activeScript && <section className="card p-5 md:p-7 mt-8 space-y-5"><div className="flex items-center justify-between gap-3"><div className="flex-1"><label className="block text-sm text-slate-400 mb-1">{locale==="ar"?"عنوان السيناريو":"Script title"}</label><input className="field" value={activeScript.script.title} onChange={e=>updateScript("title",e.target.value)}/></div><button className="btn btn-muted" onClick={()=>setActiveScript(null)} aria-label="Close"><X size={18}/></button></div><div><h3 className="font-bold text-violet-300 mb-2">{locale==="ar"?"المقدمة الجاذبة":"Opening hook"}</h3><textarea className="field" rows={3} value={activeScript.script.hook} onChange={e=>updateScript("hook",e.target.value)}/></div><div><h3 className="font-bold text-violet-300 mb-2">{locale==="ar"?"المقدمة":"Introduction"}</h3><textarea className="field" rows={4} value={activeScript.script.introduction} onChange={e=>updateScript("introduction",e.target.value)}/></div><div className="space-y-4"><h3 className="font-bold text-lg">{locale==="ar"?"المشاهد":"Scenes"} ({activeScript.script.scenes.length})</h3>{activeScript.script.scenes.map(scene=><article key={scene.number} className="rounded-xl border border-white/10 p-4"><div className="flex justify-between gap-3 mb-2"><h4 className="font-semibold">{locale==="ar"?"مشهد":"Scene"} {scene.number}</h4><span className="text-xs text-slate-400">{scene.duration_seconds}s</span></div><textarea className="field" rows={4} value={scene.narration} onChange={e=>updateScript("scenes",activeScript.script.scenes.map(s=>s.number===scene.number?{...s,narration:e.target.value}:s))}/><details className="mt-3 text-sm text-slate-400"><summary className="cursor-pointer">{locale==="ar"?"الوصف البصري للمشهد":"Visual prompt"}</summary><textarea className="field mt-2" rows={3} value={scene.visual_prompt} onChange={e=>updateScript("scenes",activeScript.script.scenes.map(s=>s.number===scene.number?{...s,visual_prompt:e.target.value}:s))}/></details></article>)}</div><div><h3 className="font-bold text-violet-300 mb-2">{locale==="ar"?"الخاتمة":"Conclusion"}</h3><textarea className="field" rows={3} value={activeScript.script.conclusion} onChange={e=>updateScript("conclusion",e.target.value)}/></div><div><h3 className="font-bold text-violet-300 mb-2">{locale==="ar"?"وصف يوتيوب":"YouTube description"}</h3><textarea className="field" rows={4} value={activeScript.script.description} onChange={e=>updateScript("description",e.target.value)}/></div><label className="block text-sm">{locale==="ar"?"الوسوم (افصل بينها بفاصلة)":"Tags (comma separated)"}<input className="field mt-2" value={activeScript.script.tags.join(", ")} onChange={e=>updateScript("tags",e.target.value.split(",").map(x=>x.trim()).filter(Boolean))}/></label><button disabled={scriptSaving} className="btn btn-primary" onClick={saveScript}>{scriptSaving?(locale==="ar"?"جارٍ الحفظ...":"Saving..."):(locale==="ar"?"حفظ تعديلات السيناريو":"Save script changes")}</button><p className="text-xs text-amber-200">{locale==="ar"?"راجع النص قبل اعتماد أي مرحلة تالية. توليد الصور لم يتم توصيله بعد.":"Review the script before approving the next stage. Image generation is not connected yet."}</p></section>}
       <div className="mt-10 border-t border-white/10 pt-5 flex flex-wrap justify-between gap-3 text-xs text-slate-500"><span>🔒 {t.private}</span><span>{email}</span></div>
     </div>
   </main>;
