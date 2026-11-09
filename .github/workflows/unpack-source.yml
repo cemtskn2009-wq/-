@@ -3,9 +3,6 @@ name: Unpack MAHMOUD AI source
 on:
   push:
     branches: [main]
-    paths:
-      - ".github/workflows/unpack-source.yml"
-      - "mahmoud-ai-video-starter.zip"
   workflow_dispatch:
 
 permissions:
