@@ -16,16 +16,10 @@ export default function Dashboard({email,role,initialProjects}:{email:string;rol
   const isAdmin = role==="admin";
   async function createProject(e:React.FormEvent) {
     e.preventDefault(); setBusy(true); setNotice("");
-    const durationMinutes = Number(duration);
-    if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 60) {
-      setNotice(locale === "ar" ? "اكتب مدة صحيحة من دقيقة إلى 60 دقيقة." : "Enter a duration from 1 to 60 minutes.");
-      setBusy(false);
-      return;
-    }
     const supabase=createClient();
     const {data,error}=await supabase.from("projects").insert({
       title:title.trim() || idea.slice(0,48), idea, format, content_language:language,
-      target_duration_minutes:durationMinutes, status:"script_draft"
+      target_duration_minutes:Number(duration), status:"script_draft"
     }).select("id,title,format,content_language,status,created_at").single();
     if(error){setNotice(t.error);setBusy(false);return;}
     setProjects([data,...projects]);setShowForm(false);setTitle("");setIdea("");setNotice(t.saved);setBusy(false);
@@ -54,7 +48,7 @@ export default function Dashboard({email,role,initialProjects}:{email:string;rol
         <div className="grid md:grid-cols-3 gap-4">
           <label className="block text-sm">{t.format}<select className="field mt-2" value={format} onChange={e=>setFormat(e.target.value)}><option value="long">{t.long}</option><option value="shorts">{t.shorts}</option></select></label>
           <label className="block text-sm">{t.language}<select className="field mt-2" value={language} onChange={e=>setLanguage(e.target.value)}><option value="ar">{t.arabic}</option><option value="en">{t.english}</option></select></label>
-          <label className="block text-sm">{t.duration}<input className="field mt-2" type="number" inputMode="numeric" min="1" max="60" step="1" required value={duration} onChange={e=>setDuration(e.target.value)} /><span className="text-xs text-slate-500">{locale==="ar"?"اكتب المدة بالدقائق من 1 إلى 60":"Enter minutes, from 1 to 60"}</span></label>
+          <label className="block text-sm">{t.duration}<select className="field mt-2" value={duration} onChange={e=>setDuration(e.target.value)}>{["1","3","5","8","10","15","20"].map(v=><option key={v} value={v}>{v} {locale==="ar"?"دقيقة":"minutes"}</option>)}</select></label>
         </div>
         <label className="block text-sm">{locale==="ar"?"اسم المشروع (اختياري)":"Project title (optional)"}<input className="field mt-2" value={title} onChange={e=>setTitle(e.target.value)} /></label>
         <div className="rounded-xl border border-amber-300/20 bg-amber-400/5 p-3 text-sm text-amber-100">{t.coming}</div>
