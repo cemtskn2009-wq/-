@@ -9,9 +9,14 @@ export async function createClient() {
     {
       cookies: {
         getAll() { return cookieStore.getAll(); },
-        setAll(cookiesToSet) {
-          try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); }
-          catch { /* Server Components cannot always write cookies; middleware refreshes sessions. */ }
+        setAll(cookiesToSet: Array<{ name: string; value: string; options?: unknown }>) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options as Parameters<typeof cookieStore.set>[2])
+            );
+          } catch {
+            // Server Components cannot always write cookies; middleware refreshes sessions.
+          }
         }
       }
     }
