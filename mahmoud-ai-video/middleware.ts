@@ -1,6 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+type CookieToSet = {
+  name: string;
+  value: string;
+  options?: Parameters<typeof NextResponse.prototype.cookies.set>[2];
+};
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
   const supabase = createServerClient(
@@ -9,10 +15,12 @@ export async function middleware(request: NextRequest) {
     {
       cookies: {
         getAll: () => request.cookies.getAll(),
-        setAll(cookies) {
+        setAll(cookies: CookieToSet[]) {
           cookies.forEach(({ name, value }) => request.cookies.set(name, value));
           response = NextResponse.next({ request });
-          cookies.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+          cookies.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
         }
       }
     }
@@ -20,4 +28,7 @@ export async function middleware(request: NextRequest) {
   await supabase.auth.getUser();
   return response;
 }
-export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"] };
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"]
+};
